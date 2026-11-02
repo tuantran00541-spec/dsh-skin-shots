@@ -26,7 +26,11 @@ await page.screenshot({ path: 'shots/welcome.png' });
 
 // Dismiss the first-run Preview Notice dialog — it blocks all navigation.
 await tryClick(/^Continue$/, 5000);
-await page.waitForTimeout(2000);
+await page.waitForTimeout(1500);
+// A second "Get started" (sign-in / API key) dialog appears behind it.
+// Close it with Escape; do NOT enter any key or sign in.
+await page.keyboard.press('Escape');
+await page.waitForTimeout(1500);
 await page.screenshot({ path: 'shots/welcome-nodialog.png' });
 
 // Skin Center lives under Settings -> Web Extensions -> Skins tab
