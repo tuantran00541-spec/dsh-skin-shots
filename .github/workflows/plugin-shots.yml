@@ -1,0 +1,59 @@
+name: plugin-shots
+on:
+  workflow_dispatch:
+
+jobs:
+  shot:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - plugin: model-router
+            pkg: dsh-model-router
+          - plugin: planning-with-files
+            pkg: dsh-planning-with-files
+          - plugin: deja
+            pkg: dsh-deja
+          - plugin: openviking-memory
+            pkg: "@openviking/dsh-memory-plugin"
+          - plugin: vision-toolkit
+            pkg: "@anionex/dsh-vision-toolkit"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dsh + pnpm
+        run: npm install -g pnpm@11.7.0 @deepseek-ai/dsh
+      - name: Install plugin (record exit code, never fail job here)
+        run: |
+          dsh plugin --profile web add "${{ matrix.pkg }}" > install.log 2>&1; echo $? > install.exit
+          tail -20 install.log
+          cat ~/.dsh/profiles/web/package.json
+      - name: Install Playwright
+        run: |
+          npm init -y
+          npm install playwright
+          npx playwright install chromium --with-deps
+      - name: Start dsh + screenshot
+        run: |
+          dsh --profile web --no-open --port 3080 > dsh.log 2>&1 &
+          for i in $(seq 1 60); do
+            if grep -q "dsh web: http" dsh.log; then break; fi
+            sleep 2
+          done
+          grep "dsh web: http" dsh.log || echo "DSH DID NOT PRINT URL"
+          export DSH_URL=$(grep -o "http://127.0.0.1:3080/[^ ]*" dsh.log | head -1)
+          if [ -n "$DSH_URL" ]; then node shot-plugins.mjs; else echo "NO URL, SKIPPING SHOTS"; fi
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shots-${{ matrix.plugin }}
+          path: |
+            shots/
+            dsh.log
+            install.log
+            install.exit
+          if-no-files-found: warn
