@@ -1,0 +1,58 @@
+name: skin-shots
+on:
+  workflow_dispatch:
+
+jobs:
+  shot:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - skin: skin3-anime-theme
+            repo: huantest2024/dsh-anime-theme
+            subdir: ""
+          - skin: skin1-yamada
+            repo: ZhangQiding/dsh-anime-ui
+            subdir: "yamada-night-shift"
+          - skin: skin2-anime-skins
+            repo: ZRTBdSS/dsh-anime-skins
+            subdir: ""
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dsh + pnpm
+        run: npm install -g pnpm@11.7.0 @deepseek-ai/dsh
+      - name: Install skin plugin
+        run: |
+          git clone --depth 1 "https://github.com/${{ matrix.repo }}.git" skin-src
+          PLUGIN_PATH="$PWD/skin-src"
+          if [ -n "${{ matrix.subdir }}" ]; then PLUGIN_PATH="$PLUGIN_PATH/${{ matrix.subdir }}"; fi
+          dsh plugin --profile web add "$PLUGIN_PATH"
+          cat ~/.dsh/profiles/web/package.json
+      - name: Install Playwright
+        run: |
+          npm init -y
+          npm install playwright
+          npx playwright install chromium --with-deps
+      - name: Start dsh + screenshot
+        run: |
+          dsh --profile web --no-open --port 3080 > dsh.log 2>&1 &
+          for i in $(seq 1 60); do
+            if grep -q "dsh web: http" dsh.log; then break; fi
+            sleep 2
+          done
+          grep "dsh web: http" dsh.log
+          export DSH_URL=$(grep -o "http://127.0.0.1:3080/[^ ]*" dsh.log | head -1)
+          node shot.mjs
+      - name: Upload shots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shots-${{ matrix.skin }}
+          path: |
+            shots/
+            dsh.log
+          if-no-files-found: warn
