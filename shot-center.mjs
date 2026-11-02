@@ -24,27 +24,45 @@ await page.goto(url, { waitUntil: 'networkidle', timeout: 90000 });
 await page.waitForTimeout(4000);
 await page.screenshot({ path: 'shots/welcome.png' });
 
+// Dismiss the first-run Preview Notice dialog — it blocks all navigation.
+await tryClick(/^Continue$/, 5000);
+await page.waitForTimeout(2000);
+await page.screenshot({ path: 'shots/welcome-nodialog.png' });
+
 // Skin Center lives under Settings -> Web Extensions -> Skins tab
-// (Chinese UI: 设置 -> Web 扩展 -> 皮肤). Walk there defensively:
-// sidebar "More" menu may hold Settings; otherwise a direct Settings entry.
-let inSettings = await tryClick(/^(Settings|设置)$/);
+// (Chinese UI: 设置 -> Web 扩展 -> 皮肤), or a first-level Skin Center section.
+// Settings hides inside a "More" menu; try the bottom one first, then the top.
+let inSettings = false;
+for (const which of ['last', 'first']) {
+  try {
+    const moreBtn = page.getByText(/^More$/, { exact: false });
+    const btn = which === 'last' ? moreBtn.last() : moreBtn.first();
+    await btn.waitFor({ state: 'visible', timeout: 3000 });
+    await btn.click();
+    await page.waitForTimeout(1200);
+    if (await tryClick(/^(Settings|设置)$/, 3000)) { inSettings = true; break; }
+  } catch { /* try the next More button */ }
+}
 if (!inSettings) {
-  await tryClick(/^More$/);
-  await page.waitForTimeout(1000);
-  inSettings = await tryClick(/^(Settings|设置)$/);
+  // Direct Settings entry, if the UI exposes one.
+  inSettings = await tryClick(/^(Settings|设置)$/, 3000);
 }
 await page.waitForTimeout(2000);
 await page.screenshot({ path: 'shots/settings.png' });
 
 if (inSettings) {
-  // Web Extensions section, then the Skins tab/card.
-  await tryClick(/Web Extensions|Web 扩展|Extensions|扩展/);
+  // Web Extensions section, then the Skins tab/card; fall back to a
+  // first-level Skin Center entry.
+  const gotExt = await tryClick(/Web Extensions|Web 扩展|Extensions|扩展/);
   await page.waitForTimeout(1500);
-  await tryClick(/^(Skins|皮肤)$/);
+  const gotSkins = await tryClick(/^(Skins|皮肤)$/);
+  if (!gotExt && !gotSkins) {
+    await tryClick(/Skin Center|皮肤中心/);
+  }
   await page.waitForTimeout(2500);
   await page.screenshot({ path: 'shots/skin-center.png' });
   await page.screenshot({ path: 'shots/skin-center-full.png', fullPage: true });
 }
 
 await browser.close();
-console.log('shots done');
+console.log('shots done, inSettings=' + inSettings);
