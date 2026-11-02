@@ -28,7 +28,9 @@ jobs:
         run: npm install -g pnpm@11.7.0 @deepseek-ai/dsh
       - name: Install plugin (record exit code, never fail job here)
         run: |
+          set +e
           dsh plugin --profile web add "${{ matrix.pkg }}" > install.log 2>&1; echo $? > install.exit
+          set -e
           tail -20 install.log
           cat ~/.dsh/profiles/web/package.json
       - name: Install Playwright
