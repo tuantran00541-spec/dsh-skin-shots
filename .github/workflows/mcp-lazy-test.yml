@@ -1,0 +1,65 @@
+name: mcp-lazy-test
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dsh + pnpm
+        run: |
+          npm install -g pnpm@11.7.0 @deepseek-ai/dsh
+          dsh --version || true
+      - name: Install dsh-mcp-lazy (record exit code, never fail job here)
+        run: |
+          set +e
+          dsh plugin --profile web add dsh-mcp-lazy > install.log 2>&1; echo $? > install.exit
+          set -e
+          echo "--- install exit: $(cat install.exit)"
+          tail -40 install.log
+          echo "--- profile package.json:"
+          cat ~/.dsh/profiles/web/package.json || echo "NO PROFILE package.json"
+      - name: Verify registration in dump-config
+        run: |
+          set +e
+          dsh --profile web --dump-config > dump.txt 2>&1; echo $? > dump.exit
+          set -e
+          echo "--- dump exit: $(cat dump.exit)"
+          grep -i -A 10 "mcp-lazy" dump.txt | head -60 || echo "MCP-LAZY NOT IN DUMP"
+          echo "--- lazy package present?"
+          ls ~/.dsh/profiles/web/node_modules/ | grep -i lazy || echo "NO LAZY PKG IN node_modules"
+          ls ~/.dsh/profiles/web/node_modules/.bin/ | grep -i lazy || echo "NO LAZY BIN"
+      - name: Adopt dry-run (no servers configured yet, expect empty plan)
+        run: |
+          set +e
+          ~/.dsh/profiles/web/node_modules/.bin/dsh-mcp-lazy-adopt > adopt.log 2>&1; echo $? > adopt.exit
+          set -e
+          echo "--- adopt exit: $(cat adopt.exit)"
+          cat adopt.log | head -40
+      - name: Boot dsh web (does the bundle patch break boot?)
+        run: |
+          dsh --profile web --no-open --port 3080 > dsh.log 2>&1 &
+          for i in $(seq 1 60); do
+            if grep -q "dsh web: http" dsh.log; then break; fi
+            sleep 2
+          done
+          grep "dsh web: http" dsh.log && echo "BOOT OK" || echo "BOOT URL NOT FOUND"
+          tail -20 dsh.log
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mcp-lazy-test
+          path: |
+            install.log
+            install.exit
+            dump.txt
+            dump.exit
+            adopt.log
+            adopt.exit
+            dsh.log
+          if-no-files-found: warn
