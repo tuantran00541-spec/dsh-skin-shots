@@ -36,10 +36,16 @@ await page.waitForTimeout(3000);
 await page.screenshot({ path: 'shots/skin3-panel.png' });
 
 if (gotTheme) {
+  // The wallpaper grid lives inside the collapsed background section:
+  // expand it first, otherwise the upload button is not visible.
+  const expanded = await tryClick(/背景/, 10000);
+  console.log('BG_SECTION_EXPANDED=' + expanded);
+  await page.waitForTimeout(2000);
+  await page.screenshot({ path: 'shots/skin3-bg-expanded.png' });
   // Click the dynamic-wallpaper upload cell and feed the test video.
   try {
     const [chooser] = await Promise.all([
-      page.waitForEvent('filechooser', { timeout: 15000 }),
+      page.waitForEvent('filechooser', { timeout: 30000 }),
       page.getByText(/上传动态壁纸/).first().click(),
     ]);
     await chooser.setFiles('skin3-test-video.mp4');
