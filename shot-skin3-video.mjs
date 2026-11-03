@@ -52,6 +52,17 @@ if (gotTheme) {
     console.log('FILECHOOSER_SET=ok');
   } catch (e) { console.log('FILECHOOSER_SET=fail ' + e.message); }
 
+  // The panel closes on the post-upload refresh, so reopen it if the
+  // grid is gone before looking for the uploaded cell.
+  let cellThere = false;
+  try { cellThere = await page.getByText('skin3-test-video.mp4', { exact: false }).first().isVisible(); } catch { cellThere = false; }
+  if (!cellThere) {
+    console.log('PANEL_REOPEN=try');
+    await tryClick(/🎨/, 10000);
+    await page.waitForTimeout(2000);
+    await tryClick(/背景/, 10000);
+    await page.waitForTimeout(2000);
+  }
   // Wait for the uploaded video cell (named after the file) to appear.
   let uploaded = false;
   try {
