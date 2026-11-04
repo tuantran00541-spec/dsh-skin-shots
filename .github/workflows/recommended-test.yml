@@ -1,0 +1,80 @@
+name: recommended-test
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: better-sidebar
+            spec: github:omdsh-dev/DSH-better-sidebar
+            grep: better-sidebar
+          - name: modlens
+            spec: github:liustack/modlens
+            grep: modlens
+          - name: dsh-market
+            spec: dshmarket
+            grep: market
+          - name: find-plugin
+            spec: github:awesome-dsh-plugin/dsh-find-plugin
+            grep: find-plugin
+          - name: browserskill
+            spec: github:Tencent/BrowserSkill
+            grep: -i browserskill
+          - name: whale-musume
+            spec: github:Sutera-Diffusus/dsh-whale-musume
+            grep: whale
+          - name: web-ui
+            spec: github:zhu1090093659/dsh-web-ui
+            grep: web-ui
+          - name: cost-meter
+            spec: github:Han-1413141/dsh-cost-meter
+            grep: cost-meter
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dsh + pnpm
+        run: |
+          npm install -g pnpm@11.7.0 @deepseek-ai/dsh
+          dsh --version || true
+      - name: Install ${{ matrix.name }} (record exit code, never fail job here)
+        run: |
+          set +e
+          dsh plugin --profile web add "${{ matrix.spec }}" > install.log 2>&1; echo $? > install.exit
+          set -e
+          echo "--- install exit: $(cat install.exit)"
+          tail -40 install.log
+          dsh --profile web --dump-config > dump.txt 2>&1 || true
+          grep ${{ matrix.grep }} dump.txt || echo "NOT IN DUMP"
+      - name: Install Playwright
+        run: |
+          npm init -y
+          npm install playwright
+          npx playwright install chromium --with-deps
+      - name: Start dsh + screenshot Plugins page
+        run: |
+          dsh --profile web --no-open --port 3080 > dsh.log 2>&1 &
+          for i in $(seq 1 60); do
+            if grep -q "dsh web: http" dsh.log; then break; fi
+            sleep 2
+          done
+          grep "dsh web: http" dsh.log || echo "DSH DID NOT PRINT URL"
+          export DSH_URL=$(grep -o "http://127.0.0.1:3080/[^ ]*" dsh.log | head -1)
+          if [ -n "$DSH_URL" ]; then node shot-recommended.mjs; else echo "NO URL, SKIPPING SHOTS"; fi
+      - name: Upload results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: recommended-${{ matrix.name }}
+          path: |
+            shots/
+            dsh.log
+            install.log
+            install.exit
+            dump.txt
+          if-no-files-found: warn
